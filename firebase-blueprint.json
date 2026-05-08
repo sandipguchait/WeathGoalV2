@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "financial_profile": {
+      "title": "Financial Profile",
+      "description": "User's financial goals and current status",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user" },
+        "goalDate": { "type": "string", "format": "date", "description": "Target date to achieve goals" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last time this profile was updated" },
+        "categories": {
+          "type": "object",
+          "properties": {
+            "salary": { "$ref": "#/entities/category_values" },
+            "etf": { "$ref": "#/entities/category_values" },
+            "stocks": { "$ref": "#/entities/category_values" },
+            "mutual_funds": { "$ref": "#/entities/category_values" },
+            "emergency_funds": { "$ref": "#/entities/category_values" },
+            "travel_fund": { "$ref": "#/entities/category_values" },
+            "gold_silver": { "$ref": "#/entities/category_values" }
+          }
+        }
+      },
+      "required": ["userId", "goalDate", "categories"]
+    },
+    "monthly_income": {
+      "title": "Monthly Income Record",
+      "description": "Historical record of actual income earned in a specific month",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "month": { "type": "number", "description": "1-12" },
+        "year": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "month", "year"]
+    },
+    "category_values": {
+      "title": "Category Values",
+      "description": "Goal and current values for a category",
+      "type": "object",
+      "properties": {
+        "goal": { "type": "number", "description": "Target amount" },
+        "current": { "type": "number", "description": "Current amount" }
+      },
+      "required": ["goal", "current"]
+    }
+  },
+  "firestore": {
+    "/profiles/{userId}": {
+      "schema": "financial_profile",
+      "description": "User's individual financial planning profile"
+    },
+    "/income_records/{recordId}": {
+      "schema": "monthly_income",
+      "description": "Historical income records (ID typically userId_year_month)"
+    }
+  }
+}
