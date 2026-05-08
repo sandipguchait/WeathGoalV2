@@ -794,16 +794,6 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Persistence Bar */}
-      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40">
-         <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xl flex items-center gap-3 sm:gap-4">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-            <div className="flex flex-col">
-              <span className="text-[9px] sm:text-[10px] font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-tighter leading-none">Live Database Connection</span>
-              <span className="text-[8px] sm:text-[9px] text-[#8E9299] dark:text-zinc-500 font-bold uppercase mt-0.5">Instance: Firebase Firestore</span>
-            </div>
-         </div>
-      </div>
     </div>
   );
 }

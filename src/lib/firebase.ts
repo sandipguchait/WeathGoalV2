@@ -15,11 +15,9 @@ export const signIn = async () => {
     if (error.code === 'auth/popup-closed-by-user') {
       console.log('User closed the login popup.');
     } else if (error.code === 'auth/unauthorized-domain') {
-      alert(`The domain you are using is not authorized in Firebase. \n\nPlease add "${window.location.hostname}" to Authorized Domains in your Firebase Console (Authentication > Settings > Authorized domains).`);
       console.error('Unauthorized Domain:', error);
     } else {
       console.error('Authentication Error:', error);
-      alert(`Login failed: ${error.message}`);
       throw error;
     }
   }
