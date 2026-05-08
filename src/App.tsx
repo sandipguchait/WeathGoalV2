@@ -310,7 +310,7 @@ export default function App() {
           <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">
             <TrendingUp className="w-5 h-5 text-white" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-zinc-800 dark:text-white">WealthWise<span className="text-emerald-600">.v2</span></h1>
+          <h1 className="text-xl font-bold tracking-tight text-zinc-800 dark:text-white">Track your Wealth <span className="text-emerald-600">Goal</span></h1>
         </div>
         <div className="flex items-center gap-4 sm:gap-6">
           <div className="text-right hidden sm:block">

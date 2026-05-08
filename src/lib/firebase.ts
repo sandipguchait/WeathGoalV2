@@ -8,7 +8,22 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
-export const signIn = () => signInWithPopup(auth, googleProvider);
+export const signIn = async () => {
+  try {
+    await signInWithPopup(auth, googleProvider);
+  } catch (error: any) {
+    if (error.code === 'auth/popup-closed-by-user') {
+      console.log('User closed the login popup.');
+    } else if (error.code === 'auth/unauthorized-domain') {
+      alert(`The domain you are using is not authorized in Firebase. \n\nPlease add "${window.location.hostname}" to Authorized Domains in your Firebase Console (Authentication > Settings > Authorized domains).`);
+      console.error('Unauthorized Domain:', error);
+    } else {
+      console.error('Authentication Error:', error);
+      alert(`Login failed: ${error.message}`);
+      throw error;
+    }
+  }
+};
 export const signOut = () => auth.signOut();
 
 export enum OperationType {
