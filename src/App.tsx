@@ -72,6 +72,7 @@ export default function App() {
   const [profile, setProfile] = useState<FinancialProfile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<any | null>(null);
+  const [showTooltipKey, setShowTooltipKey] = useState<CategoryKey | null>(null);
   
   // Monthly Income Tracker State
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -303,7 +304,10 @@ export default function App() {
   });
 
   return (
-    <div className={`${isDarkMode ? 'dark' : ''} min-h-screen bg-zinc-50 dark:bg-zinc-950 dark:text-zinc-50 overflow-x-hidden font-sans transition-colors duration-300`}>
+    <div 
+      className={`${isDarkMode ? 'dark' : ''} min-h-screen bg-zinc-50 dark:bg-zinc-950 dark:text-zinc-50 overflow-x-hidden font-sans transition-colors duration-300`}
+      onClick={() => setShowTooltipKey(null)}
+    >
       {/* Navigation Bar */}
       <nav className="h-16 px-4 sm:px-8 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 sticky top-0 z-50">
         <div className="flex items-center gap-3">
@@ -470,6 +474,28 @@ export default function App() {
                       {formatCurrency(parseFloat(monthlyIncome) || 0)}
                     </h3>
                     
+                    {parseFloat(monthlyIncome) > 0 && (
+                      <div className="mt-4 w-full px-6 flex flex-col items-center">
+                        <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden mb-2">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(100, (parseFloat(monthlyIncome) / totalMonthly) * 100)}%` }}
+                            className={`h-full ${parseFloat(monthlyIncome) >= totalMonthly ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                          />
+                        </div>
+                        <div className="flex justify-between w-full text-[9px] font-black uppercase tracking-tighter">
+                          <span className={`${parseFloat(monthlyIncome) >= totalMonthly ? 'text-emerald-500' : 'text-indigo-500'}`}>
+                            {Math.round((parseFloat(monthlyIncome) / totalMonthly) * 100)}% of goal
+                          </span>
+                          {parseFloat(monthlyIncome) < totalMonthly && (
+                            <span className="text-zinc-500">
+                              {formatCurrency(totalMonthly - parseFloat(monthlyIncome))} left
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
                     <button 
                       onClick={() => setIsEditingIncome(true)}
                       className="absolute top-2 right-2 p-2 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-full transition-all"
@@ -619,7 +645,13 @@ export default function App() {
                     </div>
                   </div>
                   
-                  <div className="relative group/progress mb-4 cursor-pointer">
+                  <div 
+                    className="relative group/progress mb-4 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowTooltipKey(showTooltipKey === key ? null : key);
+                    }}
+                  >
                     <div className="w-full h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                       <motion.div 
                         initial={{ width: 0 }}
@@ -628,8 +660,12 @@ export default function App() {
                       />
                     </div>
                     
-                    {/* Tooltip on Hover */}
-                    <div className="absolute opacity-0 group-hover/progress:opacity-100 -top-10 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-zinc-800 text-white text-[10px] py-1.5 px-3 rounded-lg pointer-events-none whitespace-nowrap transition-all duration-200 transform translate-y-2 group-hover/progress:translate-y-0 shadow-xl z-20 font-mono font-black border border-emerald-500/30 flex items-center gap-2">
+                    {/* Tooltip on Hover & Click */}
+                    <div className={`absolute -top-10 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-zinc-800 text-white text-[10px] py-1.5 px-3 rounded-lg pointer-events-none whitespace-nowrap transition-all duration-200 transform shadow-xl z-20 font-mono font-black border border-emerald-500/30 flex items-center gap-2 ${
+                      showTooltipKey === key 
+                        ? 'opacity-100 translate-y-0' 
+                        : 'opacity-0 translate-y-2 group-hover/progress:opacity-100 group-hover/progress:translate-y-0'
+                    }`}>
                        <span className="text-emerald-400">{formatCurrency(data.current)}</span>
                        <span className="text-zinc-500">/</span>
                        <span className="text-zinc-200">{formatCurrency(data.goal)}</span>
