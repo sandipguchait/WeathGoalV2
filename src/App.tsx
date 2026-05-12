@@ -31,7 +31,10 @@ import {
   Layers,
   LineChart,
   LifeBuoy,
-  Plane
+  Plane,
+  Plus,
+  Trash2,
+  ArrowLeft
 } from 'lucide-react';
 import { 
   auth, 
@@ -45,7 +48,8 @@ import {
   FinancialProfile, 
   CATEGORY_LABELS, 
   CategoryKey,
-  IncomeRecord
+  IncomeRecord,
+  AllocationItem
 } from './types';
 import { 
   calculateRequiredSavings, 
@@ -73,6 +77,9 @@ export default function App() {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<any | null>(null);
   const [showTooltipKey, setShowTooltipKey] = useState<CategoryKey | null>(null);
+  const [activeCategoryKey, setActiveCategoryKey] = useState<CategoryKey | null>(null);
+  const [isEditingAllocations, setIsEditingAllocations] = useState(false);
+  const [allocationForm, setAllocationForm] = useState<AllocationItem[]>([]);
   
   // Monthly Income Tracker State
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -203,6 +210,7 @@ export default function App() {
         formattedCategories[k] = {
           goal: parseFloat(String(formattedCategories[k].goal)) || 0,
           current: parseFloat(String(formattedCategories[k].current)) || 0,
+          allocations: formattedCategories[k].allocations || []
         };
       });
 
@@ -216,6 +224,199 @@ export default function App() {
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `profiles/${user.uid}`);
     }
+  };
+
+  const handleUpdateAllocations = async () => {
+    if (!user || !profile || !activeCategoryKey) return;
+
+    try {
+      const updatedCategories = { ...profile.categories };
+      updatedCategories[activeCategoryKey] = {
+        ...updatedCategories[activeCategoryKey],
+        allocations: allocationForm.map(item => ({
+          ...item,
+          amount: parseFloat(String(item.amount)) || 0
+        }))
+      };
+
+      await setDoc(doc(db, 'profiles', user.uid), {
+        ...profile,
+        categories: updatedCategories,
+        updatedAt: serverTimestamp()
+      });
+      setIsEditingAllocations(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `profiles/${user.uid}`);
+    }
+  };
+
+  const CategoryDetailView = ({ categoryKey, onBack }: { categoryKey: CategoryKey, onBack: () => void }) => {
+    if (!profile) return null;
+    const data = profile.categories[categoryKey];
+    const savings = calculateRequiredSavings(data.goal, data.current, profile.goalDate);
+    
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="space-y-6"
+      >
+        <div className="flex items-center justify-between mb-8">
+          <button 
+            onClick={onBack}
+            className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors font-bold text-xs uppercase tracking-widest"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Dashboard
+          </button>
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500">
+               {getCategoryIcon(categoryKey)}
+             </div>
+             <h2 className="text-2xl font-black tracking-tight text-zinc-900 dark:text-white uppercase">{CATEGORY_LABELS[categoryKey]} Allocation</h2>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-1 space-y-5">
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Monthly Target</p>
+              <h3 className="text-3xl font-black font-mono text-emerald-600">
+                {formatCurrency(savings.monthly)}
+              </h3>
+              <div className="mt-6 pt-6 border-t border-zinc-100 dark:border-zinc-800">
+                <div className="flex justify-between text-xs font-bold text-zinc-500 mb-2 uppercase tracking-tighter">
+                  <span>Allocated</span>
+                  <span>{formatCurrency(allocationForm.reduce((acc, curr) => acc + (parseFloat(String(curr.amount)) || 0), 0))}</span>
+                </div>
+                <div className="w-full h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-indigo-500"
+                    style={{ width: `${Math.min(100, (allocationForm.reduce((acc, curr) => acc + (parseFloat(String(curr.amount)) || 0), 0) / savings.monthly) * 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-zinc-900 rounded-2xl p-6 text-white overflow-hidden relative border border-transparent dark:border-zinc-800 shadow-xl">
+              <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Goal Date</p>
+              <h3 className="text-xl font-bold font-mono">
+                {new Date(profile.goalDate).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+              </h3>
+              <div className="mt-4 flex items-center gap-2">
+                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                 <span className="text-[10px] font-bold text-emerald-100/80 uppercase">Target Velocity Active</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
+                <h3 className="text-xs font-black text-zinc-500 uppercase tracking-widest">Planned Allocations</h3>
+                {!isEditingAllocations ? (
+                  <button 
+                    onClick={() => setIsEditingAllocations(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-zinc-900 dark:bg-zinc-800 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                    Manage
+                  </button>
+                ) : (
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {
+                        setIsEditingAllocations(false);
+                        setAllocationForm(data.allocations || []);
+                      }}
+                      className="px-4 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={handleUpdateAllocations}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-700 transition-all"
+                    >
+                      <Save className="w-3 h-3" />
+                      Save Changes
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              <div className="p-6 space-y-4">
+                {allocationForm.length === 0 && !isEditingAllocations && (
+                  <div className="text-center py-10">
+                    <Layers className="w-10 h-10 text-zinc-200 mx-auto mb-4" />
+                    <p className="text-zinc-400 font-medium text-sm">No allocations set for this category.</p>
+                  </div>
+                )}
+
+                {allocationForm.map((item, idx) => (
+                  <div key={item.id} className="flex gap-4 items-end animate-in fade-in slide-in-from-left-2 transition-all">
+                    <div className="flex-1 space-y-1.5">
+                      {idx === 0 && <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Asset Name</label>}
+                      <input 
+                        disabled={!isEditingAllocations}
+                        value={item.name}
+                        onChange={(e) => {
+                          const newForm = [...allocationForm];
+                          newForm[idx].name = e.target.value;
+                          setAllocationForm(newForm);
+                        }}
+                        className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-bold text-sm text-zinc-900 dark:text-zinc-100 disabled:opacity-70 focus:border-indigo-500 outline-none transition-all"
+                        placeholder="e.g. CPSE ETF"
+                      />
+                    </div>
+                    <div className="w-32 sm:w-48 space-y-1.5 text-right">
+                      {idx === 0 && <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-widest mr-1">Monthly Amount</label>}
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-sm leading-none">₹</span>
+                        <input 
+                          disabled={!isEditingAllocations}
+                          type="number"
+                          value={item.amount}
+                          onChange={(e) => {
+                            const newForm = [...allocationForm];
+                            newForm[idx].amount = parseFloat(e.target.value) || 0;
+                            setAllocationForm(newForm);
+                          }}
+                          className="w-full pl-7 pr-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-mono font-bold text-sm text-zinc-900 dark:text-zinc-100 disabled:opacity-70 focus:border-indigo-500 outline-none transition-all text-right"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                    {isEditingAllocations && (
+                      <button 
+                        onClick={() => {
+                          setAllocationForm(allocationForm.filter(i => i.id !== item.id));
+                        }}
+                        className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                {isEditingAllocations && (
+                  <button 
+                    onClick={() => {
+                      setAllocationForm([...allocationForm, { id: crypto.randomUUID(), name: '', amount: 0 }]);
+                    }}
+                    className="w-full py-4 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl text-zinc-400 hover:text-indigo-500 hover:border-indigo-500/50 transition-all flex items-center justify-center gap-2 group"
+                  >
+                    <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Add New Asset Allocation</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    );
   };
 
   const getCategoryIcon = (key: CategoryKey) => {
@@ -336,352 +537,378 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="max-w-[1400px] mx-auto p-4 sm:p-6 grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-5 auto-rows-max">
-        
-        {/* Left Section: Configuration & Timeline */}
-        <section className="md:col-span-4 space-y-5">
-           {/* Timeline Card */}
-           <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm p-6"
-          >
-            <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-              <span className="w-1 h-3 bg-emerald-500 rounded-full"></span>
-              Time Horizon
-            </h2>
-            <div className="space-y-6">
-              <div>
-                <p className="text-sm font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-emerald-600" />
-                  {profile?.goalDate ? new Date(profile.goalDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
-                </p>
-                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase mt-1">Target Date</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
-                  <p className="text-2xl font-black font-mono text-zinc-900 dark:text-zinc-100 leading-none">{remaining.months}</p>
-                  <p className="text-[10px] text-zinc-400 font-bold uppercase mt-1">Months</p>
-                </div>
-                <div className="bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
-                  <p className="text-2xl font-black font-mono text-zinc-900 dark:text-zinc-100 leading-none">{Math.floor(remaining.weeks)}</p>
-                  <p className="text-[10px] text-zinc-400 font-bold uppercase mt-1">Weeks</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => {
-                  setEditForm({ goalDate: profile!.goalDate, categories: profile!.categories });
-                  setIsEditing(true);
-                }}
-                className="w-full py-4 bg-zinc-900 dark:bg-emerald-600 text-white rounded-xl font-bold text-[10px] tracking-widest uppercase hover:bg-zinc-800 dark:hover:bg-emerald-700 transition-all focus:ring-2 ring-emerald-500/20"
-              >
-                Configure Goals
-              </button>
-            </div>
-          </motion.div>
-
-          {/* Progress Chart Simulation */}
-          <motion.div 
-             initial={{ opacity: 0, y: 20 }}
-             animate={{ opacity: 1, y: 0 }}
-             transition={{ delay: 0.1 }}
-             className="bg-zinc-900 dark:bg-zinc-900 rounded-2xl p-6 text-white overflow-hidden relative border border-transparent dark:border-zinc-800 shadow-xl"
-          >
-            <div className="relative z-10">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Total Progress</p>
-                  <h4 className="text-3xl font-black font-mono italic text-white">{overallProgress.toFixed(1)}%</h4>
-                </div>
-                <div className="w-12 h-12 rounded-full border-4 border-emerald-500 flex items-center justify-center text-[10px] font-bold text-white">
-                  {Math.round(overallProgress)}%
-                </div>
-              </div>
-              <div className="grow flex items-end gap-1.5 h-32">
-                {velocityData.map((h, i) => (
-                  <div 
-                    key={i} 
-                    className={`flex-1 rounded-t-sm transition-all duration-1000 ${i === 3 ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)]' : i < 3 ? 'bg-zinc-800 dark:bg-zinc-700' : 'bg-zinc-800/40 dark:bg-zinc-700/40'}`} 
-                    style={{ height: `${h}%` }}
-                  >
-                    {i === 3 && (
-                      <motion.div 
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: [0, 1, 0] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                        className="absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-emerald-400 rounded-full blur-[2px]"
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-between mt-2 px-1">
-                <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter">History</p>
-                <p className="text-[8px] text-emerald-500 font-bold uppercase tracking-tighter">Current</p>
-                <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter">Projected</p>
-              </div>
-            </div>
-            <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-emerald-900/40 blur-3xl"></div>
-          </motion.div>
-
-          {/* Monthly Income Tracker */}
-          <motion.div 
-             initial={{ opacity: 0, y: 20 }}
-             animate={{ opacity: 1, y: 0 }}
-             transition={{ delay: 0.2 }}
-             className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-sm"
-          >
-            <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-              <span className="w-1 h-3 bg-indigo-500 rounded-full"></span>
-              Monthly Earnings Tracker
-            </h2>
-            
-            <div className="space-y-4">
-              <div className="flex gap-2">
-                <select 
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                  className="flex-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 ring-indigo-500/20 dark:text-zinc-100"
-                >
-                  {Array.from({ length: 12 }, (_, i) => (
-                    <option key={i + 1} value={i + 1}>
-                      {new Date(0, i).toLocaleString('en-US', { month: 'long' })}
-                    </option>
-                  ))}
-                </select>
-                <select 
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                  className="w-24 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 ring-indigo-500/20 dark:text-zinc-100"
-                >
-                  {[2024, 2025, 2026, 2027].map(year => (
-                    <option key={year} value={year}>{year}</option>
-                  ))}
-                </select>
-              </div>
-
-              <AnimatePresence mode="wait">
-                {hasIncomeRecord && !isEditingIncome ? (
-                  <motion.div 
-                    key="view"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10 }}
-                    className="flex flex-col items-center justify-center py-4 bg-zinc-50 dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 group/card relative"
-                  >
-                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter mb-1">Total Earned</p>
-                    <h3 className="text-3xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
-                      {formatCurrency(parseFloat(monthlyIncome) || 0)}
-                    </h3>
-                    
-                    {parseFloat(monthlyIncome) > 0 && (
-                      <div className="mt-4 w-full px-6 flex flex-col items-center">
-                        <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden mb-2">
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${Math.min(100, (parseFloat(monthlyIncome) / totalMonthly) * 100)}%` }}
-                            className={`h-full ${parseFloat(monthlyIncome) >= totalMonthly ? 'bg-emerald-500' : 'bg-indigo-500'}`}
-                          />
-                        </div>
-                        <div className="flex justify-between w-full text-[9px] font-black uppercase tracking-tighter">
-                          <span className={`${parseFloat(monthlyIncome) >= totalMonthly ? 'text-emerald-500' : 'text-indigo-500'}`}>
-                            {Math.round((parseFloat(monthlyIncome) / totalMonthly) * 100)}% of goal
-                          </span>
-                          {parseFloat(monthlyIncome) < totalMonthly && (
-                            <span className="text-zinc-500">
-                              {formatCurrency(totalMonthly - parseFloat(monthlyIncome))} left
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    
-                    <button 
-                      onClick={() => setIsEditingIncome(true)}
-                      className="absolute top-2 right-2 p-2 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-full transition-all"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                  </motion.div>
-                ) : (
-                  <motion.div 
-                    key="edit"
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                    className="space-y-4"
-                  >
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-sm leading-none">₹</span>
-                      <input 
-                        type="number"
-                        placeholder="Enter monthly income"
-                        value={monthlyIncome}
-                        onChange={(e) => setMonthlyIncome(e.target.value)}
-                        className="w-full pl-8 pr-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-mono font-bold text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:border-indigo-500 transition-colors"
-                      />
-                    </div>
-
-                    <div className="flex gap-2">
-                       {hasIncomeRecord && (
-                        <button 
-                          onClick={() => setIsEditingIncome(false)}
-                          className="px-4 py-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-xl font-bold text-[10px] tracking-widest uppercase hover:bg-zinc-200 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      )}
-                      <button 
-                        onClick={handleSaveIncome}
-                        disabled={isSavingIncome}
-                        className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl font-bold text-[10px] tracking-widest uppercase transition-all flex items-center justify-center gap-2"
-                      >
-                        {isSavingIncome ? (
-                          <motion.div 
-                            animate={{ rotate: 360 }}
-                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                            className="w-3 h-3 border-2 border-white border-t-transparent rounded-full"
-                          />
-                        ) : hasIncomeRecord ? <Check className="w-3 h-3" /> : <Save className="w-3 h-3" />}
-                        {isSavingIncome ? 'Saving...' : hasIncomeRecord ? 'Update Record' : 'Save Record'}
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </motion.div>
-        </section>
-
-        {/* Right Section: Main Metrics & Details */}
-        <section className="md:col-span-8 space-y-5">
-          {/* Metrics Overview Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Primary Velocity Metric */}
+      <main className="max-w-[1400px] mx-auto p-4 sm:p-6">
+        <AnimatePresence mode="wait">
+          {!activeCategoryKey ? (
             <motion.div 
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-emerald-600 rounded-3xl shadow-xl p-8 text-white relative overflow-hidden group"
+              key="main-grid"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-5 auto-rows-max"
             >
-              <div className="relative z-10">
-                <p className="text-emerald-100/70 text-[10px] font-bold uppercase tracking-widest mb-2">Required Monthly Velocity</p>
-                <h3 className="text-3xl md:text-5xl font-black font-mono tracking-tighter mb-6 flex items-baseline">
-                  {formatCurrency(totalMonthly).split('.')[0]}
-                  <span className="text-lg md:text-xl opacity-40">.{formatCurrency(totalMonthly).split('.')[1] || '00'}</span>
-                </h3>
-                <div className="flex flex-wrap gap-2 sm:gap-3">
-                  <span className="px-3 py-1 bg-white/10 rounded-full text-[10px] font-bold border border-white/5">
-                    {formatCurrency(totalMonthly / 4).split('.')[0]} / weekly target
-                  </span>
-                  <span className="px-3 py-1 bg-emerald-500/30 rounded-full text-[10px] font-bold">
-                    Active Velocity
-                  </span>
-                </div>
-              </div>
-              {/* Visual Flair */}
-              <div className="absolute -right-20 -bottom-20 w-80 h-80 bg-emerald-400/20 rounded-full blur-3xl group-hover:bg-emerald-400/30 transition-all duration-700"></div>
-              <div className="absolute top-0 right-0 p-8 opacity-10">
-                <TrendingUp className="w-24 h-24" />
-              </div>
-            </motion.div>
-
-            {/* Total Networth Goal Card */}
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.1 }}
-              className="bg-indigo-600 rounded-3xl shadow-xl p-8 text-white relative overflow-hidden group"
-            >
-              <div className="relative z-10 h-full flex flex-col justify-between">
-                <div>
-                  <p className="text-indigo-100/70 text-[10px] font-bold uppercase tracking-widest mb-2">Portfolio Target 2026</p>
-                  <h3 className="text-3xl md:text-5xl font-black font-mono tracking-tighter">
-                    {formatCurrency(totalGoal).split('.')[0]}
-                    <span className="text-lg md:text-xl opacity-40">.{formatCurrency(totalGoal).split('.')[1] || '00'}</span>
-                  </h3>
-                </div>
-                
-                <div className="mt-6 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                    <span className="text-[10px] font-bold text-indigo-100/80 uppercase">Target Reached if Met</span>
-                  </div>
-                  <Target className="w-5 h-5 text-indigo-200/50" />
-                </div>
-              </div>
-              {/* Visual Flair */}
-              <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-indigo-400/20 rounded-full blur-3xl group-hover:bg-indigo-400/30 transition-all duration-700"></div>
-              <div className="absolute top-0 right-0 p-8 opacity-10">
-                <Gem className="w-24 h-24" />
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Categories Grid (Sub-Bento) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {profile && (Object.keys(profile.categories) as CategoryKey[]).map((key, idx) => {
-              const data = profile.categories[key];
-              const savings = calculateRequiredSavings(data.goal, data.current, profile.goalDate);
-              const progress = Math.min(100, (data.current / data.goal) * 100);
-
-              return (
+              {/* Left Section: Configuration & Timeline */}
+              <section className="md:col-span-4 space-y-5">
+                {/* Timeline Card */}
                 <motion.div 
-                  key={key}
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 + 0.2 }}
-                  className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500/30 dark:hover:border-emerald-500/50 transition-all group shadow-sm hover:shadow-md"
+                  className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm p-6"
                 >
-                  <div className="flex justify-between items-start mb-4">
+                  <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                    <span className="w-1 h-3 bg-emerald-500 rounded-full"></span>
+                    Time Horizon
+                  </h2>
+                  <div className="space-y-6">
                     <div>
-                      <h4 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-tight">{CATEGORY_LABELS[key]}</h4>
-                      <p className="text-xl font-bold font-mono mt-1 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors dark:text-zinc-100">
-                        {formatCurrency(savings.monthly)}
+                      <p className="text-sm font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-emerald-600" />
+                        {profile?.goalDate ? new Date(profile.goalDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
                       </p>
-                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">Monthly Target</p>
+                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase mt-1">Target Date</p>
                     </div>
-                    <div className="w-8 h-8 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/50 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                      {getCategoryIcon(key)}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
+                        <p className="text-2xl font-black font-mono text-zinc-900 dark:text-zinc-100 leading-none">{remaining.months}</p>
+                        <p className="text-[10px] text-zinc-400 font-bold uppercase mt-1">Months</p>
+                      </div>
+                      <div className="bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-xl border border-zinc-100 dark:border-zinc-700/50">
+                        <p className="text-2xl font-black font-mono text-zinc-900 dark:text-zinc-100 leading-none">{Math.floor(remaining.weeks)}</p>
+                        <p className="text-[10px] text-zinc-400 font-bold uppercase mt-1">Weeks</p>
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div 
-                    className="relative group/progress mb-4 cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowTooltipKey(showTooltipKey === key ? null : key);
-                    }}
-                  >
-                    <div className="w-full h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progress}%` }}
-                        className="h-full bg-emerald-500"
-                      />
-                    </div>
-                    
-                    {/* Tooltip on Hover & Click */}
-                    <div className={`absolute -top-10 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-zinc-800 text-white text-[10px] py-1.5 px-3 rounded-lg pointer-events-none whitespace-nowrap transition-all duration-200 transform shadow-xl z-20 font-mono font-black border border-emerald-500/30 flex items-center gap-2 ${
-                      showTooltipKey === key 
-                        ? 'opacity-100 translate-y-0' 
-                        : 'opacity-0 translate-y-2 group-hover/progress:opacity-100 group-hover/progress:translate-y-0'
-                    }`}>
-                       <span className="text-emerald-400">{formatCurrency(data.current)}</span>
-                       <span className="text-zinc-500">/</span>
-                       <span className="text-zinc-200">{formatCurrency(data.goal)}</span>
-                       <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-zinc-900 dark:bg-zinc-800 rotate-45 border-b border-r border-emerald-500/30"></div>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400">
-                    <span>{Math.round(progress)}% Complete</span>
-                    <span className="text-zinc-600 dark:text-zinc-500">Goal: {formatCurrency(data.goal)}</span>
+                    <button 
+                      onClick={() => {
+                        setEditForm({ goalDate: profile!.goalDate, categories: profile!.categories });
+                        setIsEditing(true);
+                      }}
+                      className="w-full py-4 bg-zinc-900 dark:bg-emerald-600 text-white rounded-xl font-bold text-[10px] tracking-widest uppercase hover:bg-zinc-800 dark:hover:bg-emerald-700 transition-all focus:ring-2 ring-emerald-500/20"
+                    >
+                      Configure Goals
+                    </button>
                   </div>
                 </motion.div>
-              );
-            })}
-          </div>
-        </section>
+
+                {/* Progress Chart Simulation */}
+                <motion.div 
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ delay: 0.1 }}
+                   className="bg-zinc-900 dark:bg-zinc-900 rounded-2xl p-6 text-white overflow-hidden relative border border-transparent dark:border-zinc-800 shadow-xl"
+                >
+                  <div className="relative z-10">
+                    <div className="flex justify-between items-start mb-6">
+                      <div>
+                        <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">Total Progress</p>
+                        <h4 className="text-3xl font-black font-mono italic text-white">{overallProgress.toFixed(1)}%</h4>
+                      </div>
+                      <div className="w-12 h-12 rounded-full border-4 border-emerald-500 flex items-center justify-center text-[10px] font-bold text-white">
+                        {Math.round(overallProgress)}%
+                      </div>
+                    </div>
+                    <div className="grow flex items-end gap-1.5 h-32">
+                      {velocityData.map((h, i) => (
+                        <div 
+                          key={i} 
+                          className={`flex-1 rounded-t-sm transition-all duration-1000 ${i === 3 ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)]' : i < 3 ? 'bg-zinc-800 dark:bg-zinc-700' : 'bg-zinc-800/40 dark:bg-zinc-700/40'}`} 
+                          style={{ height: `${h}%` }}
+                        >
+                          {i === 3 && (
+                            <motion.div 
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: [0, 1, 0] }}
+                              transition={{ duration: 2, repeat: Infinity }}
+                              className="absolute -top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-emerald-400 rounded-full blur-[2px]"
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between mt-2 px-1">
+                      <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter">History</p>
+                      <p className="text-[8px] text-emerald-500 font-bold uppercase tracking-tighter">Current</p>
+                      <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter">Projected</p>
+                    </div>
+                  </div>
+                  <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-emerald-900/40 blur-3xl"></div>
+                </motion.div>
+
+                {/* Monthly Income Tracker */}
+                <motion.div 
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ delay: 0.2 }}
+                   className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-sm"
+                >
+                  <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                    <span className="w-1 h-3 bg-indigo-500 rounded-full"></span>
+                    Monthly Earnings Tracker
+                  </h2>
+                  
+                  <div className="space-y-4">
+                    <div className="flex gap-2">
+                      <select 
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                        className="flex-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 ring-indigo-500/20 dark:text-zinc-100"
+                      >
+                        {Array.from({ length: 12 }, (_, i) => (
+                          <option key={i + 1} value={i + 1}>
+                            {new Date(0, i).toLocaleString('en-US', { month: 'long' })}
+                          </option>
+                        ))}
+                      </select>
+                      <select 
+                        value={selectedYear}
+                        onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                        className="w-24 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:ring-2 ring-indigo-500/20 dark:text-zinc-100"
+                      >
+                        {[2024, 2025, 2026, 2027].map(year => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <AnimatePresence mode="wait">
+                      {hasIncomeRecord && !isEditingIncome ? (
+                        <motion.div 
+                          key="view"
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: 10 }}
+                          className="flex flex-col items-center justify-center py-4 bg-zinc-50 dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 group/card relative"
+                        >
+                          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter mb-1">Total Earned</p>
+                          <h3 className="text-3xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
+                            {formatCurrency(parseFloat(monthlyIncome) || 0)}
+                          </h3>
+                          
+                          {parseFloat(monthlyIncome) > 0 && (
+                            <div className="mt-4 w-full px-6 flex flex-col items-center">
+                              <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden mb-2">
+                                <motion.div 
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${Math.min(100, (parseFloat(monthlyIncome) / totalMonthly) * 100)}%` }}
+                                  className={`h-full ${parseFloat(monthlyIncome) >= totalMonthly ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                                />
+                              </div>
+                              <div className="flex justify-between w-full text-[9px] font-black uppercase tracking-tighter">
+                                <span className={`${parseFloat(monthlyIncome) >= totalMonthly ? 'text-emerald-500' : 'text-indigo-500'}`}>
+                                  {Math.round((parseFloat(monthlyIncome) / totalMonthly) * 100)}% of goal
+                                </span>
+                                {parseFloat(monthlyIncome) < totalMonthly && (
+                                  <span className="text-zinc-500">
+                                    {formatCurrency(totalMonthly - parseFloat(monthlyIncome))} left
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setIsEditingIncome(true); }}
+                            className="absolute top-2 right-2 p-2 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 rounded-full transition-all"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        </motion.div>
+                      ) : (
+                        <motion.div 
+                          key="edit"
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          className="space-y-4"
+                        >
+                          <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-sm leading-none">₹</span>
+                            <input 
+                              type="number"
+                              placeholder="Enter monthly income"
+                              value={monthlyIncome}
+                              onChange={(e) => setMonthlyIncome(e.target.value)}
+                              className="w-full pl-8 pr-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-mono font-bold text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:border-indigo-500 transition-colors"
+                            />
+                          </div>
+
+                          <div className="flex gap-2">
+                             {hasIncomeRecord && (
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); setIsEditingIncome(false); }}
+                                className="px-4 py-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-xl font-bold text-[10px] tracking-widest uppercase hover:bg-zinc-200 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            )}
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleSaveIncome(); }}
+                              disabled={isSavingIncome}
+                              className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl font-bold text-[10px] tracking-widest uppercase transition-all flex items-center justify-center gap-2"
+                            >
+                              {isSavingIncome ? (
+                                <motion.div 
+                                  animate={{ rotate: 360 }}
+                                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                  className="w-3 h-3 border-2 border-white border-t-transparent rounded-full"
+                                />
+                              ) : hasIncomeRecord ? <Check className="w-3 h-3" /> : <Save className="w-3 h-3" />}
+                              {isSavingIncome ? 'Saving...' : hasIncomeRecord ? 'Update Record' : 'Save Record'}
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </motion.div>
+              </section>
+
+              {/* Right Section: Main Metrics & Details */}
+              <section className="md:col-span-8 space-y-5">
+                {/* Metrics Overview Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {/* Primary Velocity Metric */}
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="bg-emerald-600 rounded-3xl shadow-xl p-8 text-white relative overflow-hidden group"
+                  >
+                    <div className="relative z-10">
+                      <p className="text-emerald-100/70 text-[10px] font-bold uppercase tracking-widest mb-2">Required Monthly Velocity</p>
+                      <h3 className="text-3xl md:text-5xl font-black font-mono tracking-tighter mb-6 flex items-baseline">
+                        {formatCurrency(totalMonthly).split('.')[0]}
+                        <span className="text-lg md:text-xl opacity-40">.{formatCurrency(totalMonthly).split('.')[1] || '00'}</span>
+                      </h3>
+                      <div className="flex flex-wrap gap-2 sm:gap-3">
+                        <span className="px-3 py-1 bg-white/10 rounded-full text-[10px] font-bold border border-white/5">
+                          {formatCurrency(totalMonthly / 4).split('.')[0]} / weekly target
+                        </span>
+                        <span className="px-3 py-1 bg-emerald-500/30 rounded-full text-[10px] font-bold">
+                          Active Velocity
+                        </span>
+                      </div>
+                    </div>
+                    {/* Visual Flair */}
+                    <div className="absolute -right-20 -bottom-20 w-80 h-80 bg-emerald-400/20 rounded-full blur-3xl group-hover:bg-emerald-400/30 transition-all duration-700"></div>
+                    <div className="absolute top-0 right-0 p-8 opacity-10">
+                      <TrendingUp className="w-24 h-24" />
+                    </div>
+                  </motion.div>
+
+                  {/* Total Networth Goal Card */}
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="bg-indigo-600 rounded-3xl shadow-xl p-8 text-white relative overflow-hidden group"
+                  >
+                    <div className="relative z-10 h-full flex flex-col justify-between">
+                      <div>
+                        <p className="text-indigo-100/70 text-[10px] font-bold uppercase tracking-widest mb-2">Portfolio Target 2026</p>
+                        <h3 className="text-3xl md:text-5xl font-black font-mono tracking-tighter">
+                          {formatCurrency(totalGoal).split('.')[0]}
+                          <span className="text-lg md:text-xl opacity-40">.{formatCurrency(totalGoal).split('.')[1] || '00'}</span>
+                        </h3>
+                      </div>
+                      
+                      <div className="mt-6 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                          <span className="text-[10px] font-bold text-indigo-100/80 uppercase">Target Reached if Met</span>
+                        </div>
+                        <Target className="w-5 h-5 text-indigo-200/50" />
+                      </div>
+                    </div>
+                    {/* Visual Flair */}
+                    <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-indigo-400/20 rounded-full blur-3xl group-hover:bg-indigo-400/30 transition-all duration-700"></div>
+                    <div className="absolute top-0 right-0 p-8 opacity-10">
+                      <Gem className="w-24 h-24" />
+                    </div>
+                  </motion.div>
+                </div>
+
+                {/* Categories Grid (Sub-Bento) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {profile && (Object.keys(profile.categories) as CategoryKey[]).map((key, idx) => {
+                    const data = profile.categories[key];
+                    const savings = calculateRequiredSavings(data.goal, data.current, profile.goalDate);
+                    const progress = Math.min(100, (data.current / data.goal) * 100);
+
+                    return (
+                      <motion.div 
+                        key={key}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.05 + 0.2 }}
+                        onClick={() => {
+                          setActiveCategoryKey(key);
+                          setAllocationForm(data.allocations || []);
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500/30 dark:hover:border-emerald-500/50 transition-all group shadow-sm hover:shadow-md cursor-pointer relative overflow-hidden"
+                      >
+                         {/* Category Icon */}
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h4 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-tight">{CATEGORY_LABELS[key]}</h4>
+                            <p className="text-xl font-bold font-mono mt-1 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors dark:text-zinc-100">
+                              {formatCurrency(savings.monthly)}
+                            </p>
+                            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">Monthly Target</p>
+                          </div>
+                          <div className="w-8 h-8 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/50 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                            {getCategoryIcon(key)}
+                          </div>
+                        </div>
+                        
+                        {/* Progress Bar */}
+                        <div 
+                          className="relative group/progress mb-4"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowTooltipKey(showTooltipKey === key ? null : key);
+                          }}
+                        >
+                          <div className="w-full h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${progress}%` }}
+                              className="h-full bg-emerald-500"
+                            />
+                          </div>
+                          
+                          {/* Tooltip on Hover & Click */}
+                          <div className={`absolute -top-10 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-zinc-800 text-white text-[10px] py-1.5 px-3 rounded-lg pointer-events-none whitespace-nowrap transition-all duration-200 transform shadow-xl z-20 font-mono font-black border border-emerald-500/30 flex items-center gap-2 ${
+                            showTooltipKey === key 
+                              ? 'opacity-100 translate-y-0' 
+                              : 'opacity-0 translate-y-2 group-hover/progress:opacity-100 group-hover/progress:translate-y-0'
+                          }`}>
+                             <span className="text-emerald-400">{formatCurrency(data.current)}</span>
+                             <span className="text-zinc-500">/</span>
+                             <span className="text-zinc-200">{formatCurrency(data.goal)}</span>
+                             <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-zinc-900 dark:bg-zinc-800 rotate-45 border-b border-r border-emerald-500/30"></div>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400">
+                          <span>{Math.round(progress)}% Complete</span>
+                          <span className="text-zinc-600 dark:text-zinc-500">Goal: {formatCurrency(data.goal)}</span>
+                        </div>
+
+                        {/* Decoration */}
+                        <ChevronRight className="absolute -right-2 top-1/2 -translate-y-1/2 w-6 h-6 text-zinc-100 dark:text-zinc-800 group-hover:text-emerald-500/20 transition-colors pointer-events-none" />
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </section>
+            </motion.div>
+          ) : (
+            <CategoryDetailView 
+              categoryKey={activeCategoryKey}
+              onBack={() => setActiveCategoryKey(null)}
+            />
+          )}
+        </AnimatePresence>
       </main>
 
       {/* Footer */}

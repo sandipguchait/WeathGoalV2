@@ -1,6 +1,13 @@
+export interface AllocationItem {
+  id: string;
+  name: string;
+  amount: number;
+}
+
 export interface CategoryData {
   goal: number;
   current: number;
+  allocations?: AllocationItem[];
 }
 
 export interface FinancialProfile {
