@@ -27,6 +27,7 @@ import {
   X,
   Coins,
   Gem,
+  Globe,
   Briefcase,
   Layers,
   LineChart,
@@ -66,7 +67,8 @@ const DEFAULT_PROFILE: Omit<FinancialProfile, 'userId' | 'updatedAt'> = {
     mutual_funds: { goal: 400000, current: 190000 },
     emergency_funds: { goal: 450000, current: 310000 },
     travel_fund: { goal: 150000, current: 12000 },
-    gold_silver: { goal: 200000, current: 50000 }
+    gold_silver: { goal: 200000, current: 50000 },
+    international_stocks: { goal: 500000, current: 0 }
   }
 };
 
@@ -428,6 +430,7 @@ export default function App() {
       case 'emergency_funds': return <LifeBuoy className="w-4 h-4" />;
       case 'travel_fund': return <Plane className="w-4 h-4" />;
       case 'gold_silver': return <Gem className="w-4 h-4" />;
+      case 'international_stocks': return <Globe className="w-4 h-4" />;
       default: return <Target className="w-4 h-4" />;
     }
   };

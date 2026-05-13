@@ -22,6 +22,7 @@ export interface FinancialProfile {
     emergency_funds: CategoryData;
     travel_fund: CategoryData;
     gold_silver: CategoryData;
+    international_stocks: CategoryData;
   };
 }
 
@@ -41,5 +42,6 @@ export const CATEGORY_LABELS: Record<CategoryKey, string> = {
   mutual_funds: 'Mutual Funds',
   emergency_funds: 'Emergency Funds',
   travel_fund: 'Travel Fund',
-  gold_silver: 'Gold / Silver'
+  gold_silver: 'Gold / Silver',
+  international_stocks: 'International Stocks'
 };
