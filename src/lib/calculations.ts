@@ -18,8 +18,10 @@ export function calculateRemainingTime(targetDateStr: string) {
   };
 }
 
-export function calculateRequiredSavings(goal: number, current: number, targetDateStr: string) {
-  const gap = Math.max(0, goal - current);
+export function calculateRequiredSavings(goal: number | string, current: number | string, targetDateStr: string) {
+  const g = parseFloat(String(goal)) || 0;
+  const c = parseFloat(String(current)) || 0;
+  const gap = Math.max(0, g - c);
   const time = calculateRemainingTime(targetDateStr);
   
   return {
@@ -29,10 +31,11 @@ export function calculateRequiredSavings(goal: number, current: number, targetDa
   };
 }
 
-export function formatCurrency(amount: number) {
+export function formatCurrency(amount: number | string) {
+  const val = parseFloat(String(amount)) || 0;
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
-  }).format(amount);
+  }).format(val);
 }

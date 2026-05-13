@@ -72,6 +72,207 @@ const DEFAULT_PROFILE: Omit<FinancialProfile, 'userId' | 'updatedAt'> = {
   }
 };
 
+  const getCategoryIcon = (key: CategoryKey) => {
+    switch (key) {
+      case 'salary': return <Briefcase className="w-4 h-4" />;
+      case 'etf': return <Layers className="w-4 h-4" />;
+      case 'stocks': return <LineChart className="w-4 h-4" />;
+      case 'mutual_funds': return <TrendingUp className="w-4 h-4" />;
+      case 'emergency_funds': return <LifeBuoy className="w-4 h-4" />;
+      case 'travel_fund': return <Plane className="w-4 h-4" />;
+      case 'gold_silver': return <Gem className="w-4 h-4" />;
+      case 'international_stocks': return <Globe className="w-4 h-4" />;
+      default: return <Target className="w-4 h-4" />;
+    }
+  };
+
+  const CategoryDetailView = ({ 
+    categoryKey, 
+    onBack, 
+    profile, 
+    allocationForm, 
+    setAllocationForm, 
+    isEditingAllocations, 
+    setIsEditingAllocations, 
+    handleUpdateAllocations 
+  }: { 
+    categoryKey: CategoryKey, 
+    onBack: () => void,
+    profile: FinancialProfile | null,
+    allocationForm: AllocationItem[],
+    setAllocationForm: React.Dispatch<React.SetStateAction<AllocationItem[]>>,
+    isEditingAllocations: boolean,
+    setIsEditingAllocations: React.Dispatch<React.SetStateAction<boolean>>,
+    handleUpdateAllocations: () => Promise<void>
+  }) => {
+    if (!profile) return null;
+    const data = profile.categories[categoryKey];
+    const savings = calculateRequiredSavings(data.goal, data.current, profile.goalDate);
+    
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="space-y-6"
+      >
+        <div className="flex items-center justify-between mb-8">
+          <button 
+            onClick={onBack}
+            className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors font-bold text-xs uppercase tracking-widest"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Dashboard
+          </button>
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500">
+               {getCategoryIcon(categoryKey)}
+             </div>
+             <h2 className="text-2xl font-black tracking-tight text-zinc-900 dark:text-white uppercase">{CATEGORY_LABELS[categoryKey]} Allocation</h2>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-1 space-y-5">
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Monthly Target</p>
+              <h3 className="text-3xl font-black font-mono text-emerald-600">
+                {formatCurrency(savings.monthly)}
+              </h3>
+              <div className="mt-6 pt-6 border-t border-zinc-100 dark:border-zinc-800">
+                <div className="flex justify-between text-xs font-bold text-zinc-500 mb-2 uppercase tracking-tighter">
+                  <span>Allocated</span>
+                  <span>{formatCurrency(allocationForm.reduce((acc, curr) => acc + (parseFloat(String(curr.amount)) || 0), 0))}</span>
+                </div>
+                <div className="w-full h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-indigo-500"
+                    style={{ width: `${Math.min(100, (allocationForm.reduce((acc, curr) => acc + (parseFloat(String(curr.amount)) || 0), 0) / savings.monthly) * 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-zinc-900 rounded-2xl p-6 text-white overflow-hidden relative border border-transparent dark:border-zinc-800 shadow-xl">
+              <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Goal Date</p>
+              <h3 className="text-xl font-bold font-mono">
+                {new Date(profile.goalDate).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+              </h3>
+              <div className="mt-4 flex items-center gap-2">
+                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                 <span className="text-[10px] font-bold text-emerald-100/80 uppercase">Target Velocity Active</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
+                <h3 className="text-xs font-black text-zinc-500 uppercase tracking-widest">Planned Allocations</h3>
+                {!isEditingAllocations ? (
+                  <button 
+                    onClick={() => setIsEditingAllocations(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-zinc-900 dark:bg-zinc-800 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                    Manage
+                  </button>
+                ) : (
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {
+                        setIsEditingAllocations(false);
+                        setAllocationForm(data.allocations || []);
+                      }}
+                      className="px-4 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={handleUpdateAllocations}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-700 transition-all"
+                    >
+                      <Save className="w-3 h-3" />
+                      Save Changes
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              <div className="p-6 space-y-4">
+                {allocationForm.length === 0 && !isEditingAllocations && (
+                  <div className="text-center py-10">
+                    <Layers className="w-10 h-10 text-zinc-200 mx-auto mb-4" />
+                    <p className="text-zinc-400 font-medium text-sm">No allocations set for this category.</p>
+                  </div>
+                )}
+
+                {allocationForm.map((item, idx) => (
+                  <div key={item.id} className="flex gap-4 items-end animate-in fade-in slide-in-from-left-2 transition-all">
+                    <div className="flex-1 space-y-1.5">
+                      {idx === 0 && <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Asset Name</label>}
+                      <input 
+                        disabled={!isEditingAllocations}
+                        value={item.name}
+                        onChange={(e) => {
+                          const newForm = [...allocationForm];
+                          newForm[idx].name = e.target.value;
+                          setAllocationForm(newForm);
+                        }}
+                        className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-bold text-sm text-zinc-900 dark:text-zinc-100 disabled:opacity-70 focus:border-indigo-500 outline-none transition-all"
+                        placeholder="e.g. CPSE ETF"
+                      />
+                    </div>
+                    <div className="w-32 sm:w-48 space-y-1.5 text-right">
+                      {idx === 0 && <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-widest mr-1">Monthly Amount</label>}
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-sm leading-none">₹</span>
+                        <input 
+                          disabled={!isEditingAllocations}
+                          type="number"
+                          value={item.amount}
+                          onChange={(e) => {
+                            const newForm = [...allocationForm];
+                            newForm[idx].amount = e.target.value;
+                            setAllocationForm(newForm);
+                          }}
+                          className="w-full pl-7 pr-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-mono font-bold text-sm text-zinc-900 dark:text-zinc-100 disabled:opacity-70 focus:border-indigo-500 outline-none transition-all text-right"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                    {isEditingAllocations && (
+                      <button 
+                        onClick={() => {
+                          setAllocationForm(allocationForm.filter(i => i.id !== item.id));
+                        }}
+                        className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                {isEditingAllocations && (
+                  <button 
+                    onClick={() => {
+                      setAllocationForm([...allocationForm, { id: crypto.randomUUID(), name: '', amount: '' }]);
+                    }}
+                    className="w-full py-4 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl text-zinc-400 hover:text-indigo-500 hover:border-indigo-500/50 transition-all flex items-center justify-center gap-2 group"
+                  >
+                    <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Add New Asset Allocation</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -249,189 +450,6 @@ export default function App() {
       setIsEditingAllocations(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `profiles/${user.uid}`);
-    }
-  };
-
-  const CategoryDetailView = ({ categoryKey, onBack }: { categoryKey: CategoryKey, onBack: () => void }) => {
-    if (!profile) return null;
-    const data = profile.categories[categoryKey];
-    const savings = calculateRequiredSavings(data.goal, data.current, profile.goalDate);
-    
-    return (
-      <motion.div 
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: -20 }}
-        className="space-y-6"
-      >
-        <div className="flex items-center justify-between mb-8">
-          <button 
-            onClick={onBack}
-            className="flex items-center gap-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors font-bold text-xs uppercase tracking-widest"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
-          </button>
-          <div className="flex items-center gap-3">
-             <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500">
-               {getCategoryIcon(categoryKey)}
-             </div>
-             <h2 className="text-2xl font-black tracking-tight text-zinc-900 dark:text-white uppercase">{CATEGORY_LABELS[categoryKey]} Allocation</h2>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-1 space-y-5">
-            <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Monthly Target</p>
-              <h3 className="text-3xl font-black font-mono text-emerald-600">
-                {formatCurrency(savings.monthly)}
-              </h3>
-              <div className="mt-6 pt-6 border-t border-zinc-100 dark:border-zinc-800">
-                <div className="flex justify-between text-xs font-bold text-zinc-500 mb-2 uppercase tracking-tighter">
-                  <span>Allocated</span>
-                  <span>{formatCurrency(allocationForm.reduce((acc, curr) => acc + (parseFloat(String(curr.amount)) || 0), 0))}</span>
-                </div>
-                <div className="w-full h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-indigo-500"
-                    style={{ width: `${Math.min(100, (allocationForm.reduce((acc, curr) => acc + (parseFloat(String(curr.amount)) || 0), 0) / savings.monthly) * 100)}%` }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-zinc-900 rounded-2xl p-6 text-white overflow-hidden relative border border-transparent dark:border-zinc-800 shadow-xl">
-              <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Goal Date</p>
-              <h3 className="text-xl font-bold font-mono">
-                {new Date(profile.goalDate).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
-              </h3>
-              <div className="mt-4 flex items-center gap-2">
-                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                 <span className="text-[10px] font-bold text-emerald-100/80 uppercase">Target Velocity Active</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="md:col-span-2">
-            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
-              <div className="p-6 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
-                <h3 className="text-xs font-black text-zinc-500 uppercase tracking-widest">Planned Allocations</h3>
-                {!isEditingAllocations ? (
-                  <button 
-                    onClick={() => setIsEditingAllocations(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-zinc-900 dark:bg-zinc-800 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all"
-                  >
-                    <Edit2 className="w-3 h-3" />
-                    Manage
-                  </button>
-                ) : (
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => {
-                        setIsEditingAllocations(false);
-                        setAllocationForm(data.allocations || []);
-                      }}
-                      className="px-4 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition-all"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      onClick={handleUpdateAllocations}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-700 transition-all"
-                    >
-                      <Save className="w-3 h-3" />
-                      Save Changes
-                    </button>
-                  </div>
-                )}
-              </div>
-              
-              <div className="p-6 space-y-4">
-                {allocationForm.length === 0 && !isEditingAllocations && (
-                  <div className="text-center py-10">
-                    <Layers className="w-10 h-10 text-zinc-200 mx-auto mb-4" />
-                    <p className="text-zinc-400 font-medium text-sm">No allocations set for this category.</p>
-                  </div>
-                )}
-
-                {allocationForm.map((item, idx) => (
-                  <div key={item.id} className="flex gap-4 items-end animate-in fade-in slide-in-from-left-2 transition-all">
-                    <div className="flex-1 space-y-1.5">
-                      {idx === 0 && <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Asset Name</label>}
-                      <input 
-                        disabled={!isEditingAllocations}
-                        value={item.name}
-                        onChange={(e) => {
-                          const newForm = [...allocationForm];
-                          newForm[idx].name = e.target.value;
-                          setAllocationForm(newForm);
-                        }}
-                        className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-bold text-sm text-zinc-900 dark:text-zinc-100 disabled:opacity-70 focus:border-indigo-500 outline-none transition-all"
-                        placeholder="e.g. CPSE ETF"
-                      />
-                    </div>
-                    <div className="w-32 sm:w-48 space-y-1.5 text-right">
-                      {idx === 0 && <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-widest mr-1">Monthly Amount</label>}
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-sm leading-none">₹</span>
-                        <input 
-                          disabled={!isEditingAllocations}
-                          type="number"
-                          value={item.amount}
-                          onChange={(e) => {
-                            const newForm = [...allocationForm];
-                            newForm[idx].amount = parseFloat(e.target.value) || 0;
-                            setAllocationForm(newForm);
-                          }}
-                          className="w-full pl-7 pr-4 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-mono font-bold text-sm text-zinc-900 dark:text-zinc-100 disabled:opacity-70 focus:border-indigo-500 outline-none transition-all text-right"
-                          placeholder="0"
-                        />
-                      </div>
-                    </div>
-                    {isEditingAllocations && (
-                      <button 
-                        onClick={() => {
-                          setAllocationForm(allocationForm.filter(i => i.id !== item.id));
-                        }}
-                        className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-all"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-
-                {isEditingAllocations && (
-                  <button 
-                    onClick={() => {
-                      setAllocationForm([...allocationForm, { id: crypto.randomUUID(), name: '', amount: 0 }]);
-                    }}
-                    className="w-full py-4 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl text-zinc-400 hover:text-indigo-500 hover:border-indigo-500/50 transition-all flex items-center justify-center gap-2 group"
-                  >
-                    <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest">Add New Asset Allocation</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-    );
-  };
-
-  const getCategoryIcon = (key: CategoryKey) => {
-    switch (key) {
-      case 'salary': return <Briefcase className="w-4 h-4" />;
-      case 'etf': return <Layers className="w-4 h-4" />;
-      case 'stocks': return <LineChart className="w-4 h-4" />;
-      case 'mutual_funds': return <TrendingUp className="w-4 h-4" />;
-      case 'emergency_funds': return <LifeBuoy className="w-4 h-4" />;
-      case 'travel_fund': return <Plane className="w-4 h-4" />;
-      case 'gold_silver': return <Gem className="w-4 h-4" />;
-      case 'international_stocks': return <Globe className="w-4 h-4" />;
-      default: return <Target className="w-4 h-4" />;
     }
   };
 
@@ -909,6 +927,12 @@ export default function App() {
             <CategoryDetailView 
               categoryKey={activeCategoryKey}
               onBack={() => setActiveCategoryKey(null)}
+              profile={profile}
+              allocationForm={allocationForm}
+              setAllocationForm={setAllocationForm}
+              isEditingAllocations={isEditingAllocations}
+              setIsEditingAllocations={setIsEditingAllocations}
+              handleUpdateAllocations={handleUpdateAllocations}
             />
           )}
         </AnimatePresence>

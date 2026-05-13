@@ -1,12 +1,12 @@
 export interface AllocationItem {
   id: string;
   name: string;
-  amount: number;
+  amount: number | string;
 }
 
 export interface CategoryData {
-  goal: number;
-  current: number;
+  goal: number | string;
+  current: number | string;
   allocations?: AllocationItem[];
 }
 
