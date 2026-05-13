@@ -35,7 +35,8 @@ import {
   Plane,
   Plus,
   Trash2,
-  ArrowLeft
+  ArrowLeft,
+  Settings
 } from 'lucide-react';
 import { 
   auth, 
@@ -94,7 +95,12 @@ const DEFAULT_PROFILE: Omit<FinancialProfile, 'userId' | 'updatedAt'> = {
     setAllocationForm, 
     isEditingAllocations, 
     setIsEditingAllocations, 
-    handleUpdateAllocations 
+    handleUpdateAllocations,
+    handleUpdateProfile,
+    isEditingGoals,
+    setIsEditingGoals,
+    editForm,
+    setEditForm
   }: { 
     categoryKey: CategoryKey, 
     onBack: () => void,
@@ -103,11 +109,23 @@ const DEFAULT_PROFILE: Omit<FinancialProfile, 'userId' | 'updatedAt'> = {
     setAllocationForm: React.Dispatch<React.SetStateAction<AllocationItem[]>>,
     isEditingAllocations: boolean,
     setIsEditingAllocations: React.Dispatch<React.SetStateAction<boolean>>,
-    handleUpdateAllocations: () => Promise<void>
+    handleUpdateAllocations: () => Promise<void>,
+    handleUpdateProfile: (e: React.FormEvent) => Promise<void>,
+    isEditingGoals: boolean,
+    setIsEditingGoals: React.Dispatch<React.SetStateAction<boolean>>,
+    editForm: FinancialProfile | null,
+    setEditForm: React.Dispatch<React.SetStateAction<FinancialProfile | null>>
   }) => {
     if (!profile) return null;
     const data = profile.categories[categoryKey];
     const savings = calculateRequiredSavings(data.goal, data.current, profile.goalDate);
+    const remainingTime = calculateRemainingTime(profile.goalDate);
+    const totalAllocated = allocationForm.reduce((acc, curr) => acc + (parseFloat(String(curr.amount)) || 0), 0);
+    const projectedGoal = (parseFloat(String(data.current)) || 0) + (totalAllocated * remainingTime.months);
+    const isOverTarget = projectedGoal >= (parseFloat(String(data.goal)) || 0);
+
+    const isSalary = categoryKey === 'salary';
+    const activeEditCategory = editForm?.categories[categoryKey];
     
     return (
       <motion.div 
@@ -134,35 +152,185 @@ const DEFAULT_PROFILE: Omit<FinancialProfile, 'userId' | 'updatedAt'> = {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-1 space-y-5">
-            <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Monthly Target</p>
-              <h3 className="text-3xl font-black font-mono text-emerald-600">
+            {/* Goal Configuration Card */}
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
+                <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Goal Metrics</p>
+                {!isEditingGoals ? (
+                  <button 
+                    onClick={() => {
+                      setEditForm(profile);
+                      setIsEditingGoals(true);
+                    }}
+                    className="p-1.5 text-zinc-400 hover:text-indigo-500 transition-colors"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setIsEditingGoals(false)}
+                      className="text-[9px] font-bold text-zinc-400 uppercase hover:text-zinc-600 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        handleUpdateProfile(e as any);
+                        setIsEditingGoals(false);
+                      }}
+                      className="text-[9px] font-bold text-emerald-600 uppercase hover:text-emerald-700 transition-colors"
+                    >
+                      Save
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              <div className="p-6 space-y-6">
+                {!isEditingGoals ? (
+                  <>
+                    <div>
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Target End Goal</p>
+                      <h3 className="text-2xl font-black font-mono text-zinc-900 dark:text-white">
+                        {formatCurrency(data.goal)}
+                      </h3>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Current Portfolio</p>
+                      <h3 className="text-2xl font-black font-mono text-zinc-900 dark:text-white">
+                        {formatCurrency(data.current)}
+                      </h3>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Time horizon</p>
+                      <div className="flex items-center gap-2 text-zinc-900 dark:text-white">
+                        <Calendar className="w-4 h-4 text-emerald-500" />
+                        <span className="text-sm font-bold">{new Date(profile.goalDate).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5 ml-1">Daily Target Milestone</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-sm">₹</span>
+                        <input 
+                          type="number"
+                          value={activeEditCategory?.goal}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditForm(prev => {
+                              if (!prev) return null;
+                              return {
+                                ...prev,
+                                categories: {
+                                  ...prev.categories,
+                                  [categoryKey]: { ...prev.categories[categoryKey], goal: val }
+                                }
+                              };
+                            });
+                          }}
+                          className="w-full pl-7 pr-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-mono font-bold text-sm text-emerald-600 outline-none focus:border-indigo-500 transition-all"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5 ml-1">Current Portfolio State</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-sm">₹</span>
+                        <input 
+                          type="number"
+                          value={activeEditCategory?.current}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEditForm(prev => {
+                              if (!prev) return null;
+                              return {
+                                ...prev,
+                                categories: {
+                                  ...prev.categories,
+                                  [categoryKey]: { ...prev.categories[categoryKey], current: val }
+                                }
+                              };
+                            });
+                          }}
+                          className="w-full pl-7 pr-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-mono font-bold text-sm text-indigo-600 outline-none focus:border-indigo-500 transition-all"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5 ml-1">Universe End Date</label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
+                        <input 
+                          type="date"
+                          value={editForm?.goalDate}
+                          onChange={(e) => setEditForm(prev => prev ? ({ ...prev, goalDate: e.target.value }) : null)}
+                          className="w-full pl-10 pr-3 py-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-bold text-xs text-zinc-900 dark:text-zinc-100 outline-none focus:border-indigo-500 transition-all"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm relative overflow-hidden">
+              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1 relative z-10">Monthly Required Savings</p>
+              <h3 className="text-3xl font-black font-mono text-emerald-600 relative z-10">
                 {formatCurrency(savings.monthly)}
               </h3>
-              <div className="mt-6 pt-6 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="mt-6 pt-6 border-t border-zinc-100 dark:border-zinc-800 relative z-10">
                 <div className="flex justify-between text-xs font-bold text-zinc-500 mb-2 uppercase tracking-tighter">
-                  <span>Allocated</span>
-                  <span>{formatCurrency(allocationForm.reduce((acc, curr) => acc + (parseFloat(String(curr.amount)) || 0), 0))}</span>
+                  <span>Actual Allocation</span>
+                  <span>{formatCurrency(totalAllocated)}</span>
                 </div>
                 <div className="w-full h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-indigo-500"
-                    style={{ width: `${Math.min(100, (allocationForm.reduce((acc, curr) => acc + (parseFloat(String(curr.amount)) || 0), 0) / savings.monthly) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (totalAllocated / (parseFloat(String(savings.monthly)) || 1)) * 100)}%` }}
                   ></div>
                 </div>
               </div>
             </div>
 
-            <div className="bg-zinc-900 rounded-2xl p-6 text-white overflow-hidden relative border border-transparent dark:border-zinc-800 shadow-xl">
-              <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Goal Date</p>
-              <h3 className="text-xl font-bold font-mono">
-                {new Date(profile.goalDate).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
-              </h3>
-              <div className="mt-4 flex items-center gap-2">
-                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                 <span className="text-[10px] font-bold text-emerald-100/80 uppercase">Target Velocity Active</span>
+            {!isSalary ? (
+              <div className={`p-6 rounded-2xl border shadow-xl relative overflow-hidden transition-all ${isOverTarget ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800'}`}>
+                <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 relative z-10 ${isOverTarget ? 'text-emerald-100' : 'text-zinc-400'}`}>Projected 2026 Outcome</p>
+                <h3 className={`text-4xl font-black font-mono relative z-10 ${isOverTarget ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                  {formatCurrency(projectedGoal)}
+                </h3>
+                <p className={`text-[9px] font-bold uppercase mt-4 relative z-10 ${isOverTarget ? 'text-emerald-100' : 'text-zinc-500'}`}>
+                  Growth based on current momentum
+                </p>
+                
+                {isOverTarget ? (
+                  <div className="mt-4 flex items-center gap-2 bg-white/10 p-3 rounded-xl backdrop-blur-sm relative z-10">
+                    <Check className="w-4 h-4" />
+                    <span className="text-[10px] font-black uppercase">Velocity is optimal</span>
+                  </div>
+                ) : (
+                  <div className="mt-4 flex items-center gap-2 bg-amber-50 dark:bg-amber-950/30 p-3 rounded-xl border border-amber-200 dark:border-amber-900/30 relative z-10">
+                    <AlertCircle className="w-4 h-4 text-amber-500" />
+                    <span className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-500">
+                      Portfolio Gap detected
+                    </span>
+                  </div>
+                )}
               </div>
-            </div>
+            ) : (
+              <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Income Profile</p>
+                <h3 className="text-3xl font-black font-mono text-indigo-600">
+                  Recurring
+                </h3>
+                <p className="text-[9px] font-bold text-zinc-500 uppercase mt-4">
+                  Salary is treated as cash flow, not an investment goal.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="md:col-span-2">
@@ -277,7 +445,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<FinancialProfile | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditingGoals, setIsEditingGoals] = useState(false);
   const [editForm, setEditForm] = useState<any | null>(null);
   const [showTooltipKey, setShowTooltipKey] = useState<CategoryKey | null>(null);
   const [activeCategoryKey, setActiveCategoryKey] = useState<CategoryKey | null>(null);
@@ -423,7 +591,7 @@ export default function App() {
         userId: user.uid,
         updatedAt: serverTimestamp()
       });
-      setIsEditing(false);
+      setIsEditingGoals(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `profiles/${user.uid}`);
     }
@@ -503,9 +671,20 @@ export default function App() {
     return acc + calculateRequiredSavings(cat.goal, cat.current, profile.goalDate).monthly;
   }, 0) : 0;
 
-  const totalCurrent = profile ? Object.keys(profile.categories).reduce((acc, key) => acc + profile.categories[key as CategoryKey].current, 0) : 0;
-  const totalGoal = profile ? Object.keys(profile.categories).reduce((acc, key) => acc + profile.categories[key as CategoryKey].goal, 0) : 0;
+  const totalCurrent = profile ? Object.keys(profile.categories).reduce((acc, key) => acc + (parseFloat(String(profile.categories[key as CategoryKey].current)) || 0), 0) : 0;
+  const totalGoal = profile ? Object.keys(profile.categories).reduce((acc, key) => acc + (parseFloat(String(profile.categories[key as CategoryKey].goal)) || 0), 0) : 0;
   const overallProgress = totalGoal > 0 ? (totalCurrent / totalGoal) * 100 : 0;
+
+  // Global Projection Logic (excluding Salary)
+  const monthsRemaining = profile ? calculateRemainingTime(profile.goalDate).months : 0;
+  const totalProjected = profile ? Object.keys(profile.categories).reduce((acc, key) => {
+    if (key === 'salary') return acc;
+    const data = profile.categories[key as CategoryKey];
+    const categoryCurrent = parseFloat(String(data.current)) || 0;
+    const categoryMonthlyAllocated = (data.allocations || []).reduce((sum, item) => sum + (parseFloat(String(item.amount)) || 0), 0);
+    return acc + (categoryCurrent + (categoryMonthlyAllocated * monthsRemaining));
+  }, 0) : 0;
+  const isGlobalOnTrack = totalProjected >= totalGoal;
 
   // Generate dynamic chart data based on progress and time
   const currentMonthIdx = new Date().getMonth();
@@ -598,15 +777,6 @@ export default function App() {
                         <p className="text-[10px] text-zinc-400 font-bold uppercase mt-1">Weeks</p>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => {
-                        setEditForm({ goalDate: profile!.goalDate, categories: profile!.categories });
-                        setIsEditing(true);
-                      }}
-                      className="w-full py-4 bg-zinc-900 dark:bg-emerald-600 text-white rounded-xl font-bold text-[10px] tracking-widest uppercase hover:bg-zinc-800 dark:hover:bg-emerald-700 transition-all focus:ring-2 ring-emerald-500/20"
-                    >
-                      Configure Goals
-                    </button>
                   </div>
                 </motion.div>
 
@@ -820,23 +990,39 @@ export default function App() {
                     initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.1 }}
-                    className="bg-indigo-600 rounded-3xl shadow-xl p-8 text-white relative overflow-hidden group"
+                    className={`rounded-3xl shadow-xl p-8 text-white relative overflow-hidden group transition-all duration-500 ${isGlobalOnTrack ? 'bg-indigo-600' : 'bg-zinc-900 border border-zinc-800'}`}
                   >
                     <div className="relative z-10 h-full flex flex-col justify-between">
                       <div>
-                        <p className="text-indigo-100/70 text-[10px] font-bold uppercase tracking-widest mb-2">Portfolio Target 2026</p>
+                        <div className="flex justify-between items-start mb-2">
+                           <p className="text-indigo-100/70 text-[10px] font-bold uppercase tracking-widest">Portfolio Target 2026</p>
+                           {isGlobalOnTrack ? (
+                             <span className="bg-emerald-500/20 text-emerald-300 text-[8px] font-black uppercase px-2 py-1 rounded-md border border-emerald-500/20">On Track</span>
+                           ) : (
+                             <span className="bg-amber-500/20 text-amber-300 text-[8px] font-black uppercase px-2 py-1 rounded-md border border-amber-500/20">Gap in Strategy</span>
+                           )}
+                        </div>
                         <h3 className="text-3xl md:text-5xl font-black font-mono tracking-tighter">
                           {formatCurrency(totalGoal).split('.')[0]}
                           <span className="text-lg md:text-xl opacity-40">.{formatCurrency(totalGoal).split('.')[1] || '00'}</span>
                         </h3>
                       </div>
                       
-                      <div className="mt-6 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                          <span className="text-[10px] font-bold text-indigo-100/80 uppercase">Target Reached if Met</span>
+                      <div className="mt-8 pt-6 border-t border-white/10">
+                        <p className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${isGlobalOnTrack ? 'text-indigo-200' : 'text-zinc-500'}`}>Projected Portfolio Value</p>
+                        <div className="flex items-baseline gap-2">
+                          <h4 className={`text-2xl font-black font-mono ${isGlobalOnTrack ? 'text-emerald-400' : 'text-indigo-400'}`}>
+                            {formatCurrency(totalProjected).split('.')[0]}
+                          </h4>
+                          <span className={`text-[10px] font-bold uppercase ${isGlobalOnTrack ? 'text-emerald-500/60' : 'text-zinc-500'}`}>Realization</span>
                         </div>
-                        <Target className="w-5 h-5 text-indigo-200/50" />
+                        
+                        {!isGlobalOnTrack && (
+                          <p className="text-[9px] font-bold text-amber-400 uppercase mt-2 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            Deficit: {formatCurrency(totalGoal - totalProjected)}
+                          </p>
+                        )}
                       </div>
                     </div>
                     {/* Visual Flair */}
@@ -852,7 +1038,13 @@ export default function App() {
                   {profile && (Object.keys(profile.categories) as CategoryKey[]).map((key, idx) => {
                     const data = profile.categories[key];
                     const savings = calculateRequiredSavings(data.goal, data.current, profile.goalDate);
-                    const progress = Math.min(100, (data.current / data.goal) * 100);
+                    const progress = Math.min(100, (parseFloat(String(data.current)) / parseFloat(String(data.goal) || "1")) * 100);
+                    
+                    // Projection Logic
+                    const remainingTime = calculateRemainingTime(profile.goalDate);
+                    const totalAllocated = (data.allocations || []).reduce((acc, curr) => acc + (parseFloat(String(curr.amount)) || 0), 0);
+                    const projectedGoal = (parseFloat(String(data.current)) || 0) + (totalAllocated * remainingTime.months);
+                    const isOverTarget = projectedGoal >= (parseFloat(String(data.goal)) || 0);
 
                     return (
                       <motion.div 
@@ -865,7 +1057,7 @@ export default function App() {
                           setAllocationForm(data.allocations || []);
                           window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
-                        className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500/30 dark:hover:border-emerald-500/50 transition-all group shadow-sm hover:shadow-md cursor-pointer relative overflow-hidden"
+                        className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500/30 dark:hover:border-emerald-500/50 transition-all group shadow-sm hover:shadow-md cursor-pointer relative overflow-hidden flex flex-col justify-between"
                       >
                          {/* Category Icon */}
                         <div className="flex justify-between items-start mb-4">
@@ -910,10 +1102,35 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400">
+                        <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400 mb-4">
                           <span>{Math.round(progress)}% Complete</span>
                           <span className="text-zinc-600 dark:text-zinc-500">Goal: {formatCurrency(data.goal)}</span>
                         </div>
+
+                        {/* Projection Summary Section (Excluding Salary) */}
+                        {key !== 'salary' && (
+                          <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800/50 mt-auto">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Projected End</span>
+                              <span className={`text-[11px] font-black font-mono ${isOverTarget ? 'text-emerald-500' : 'text-indigo-500 dark:text-indigo-400'}`}>
+                                {formatCurrency(projectedGoal)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-[8px] font-bold text-zinc-400 uppercase">Status</span>
+                              <div className="flex items-center gap-1">
+                                {isOverTarget ? (
+                                  <Check className="w-2.5 h-2.5 text-emerald-500" />
+                                ) : (
+                                  <AlertCircle className="w-2.5 h-2.5 text-amber-500" />
+                                )}
+                                <span className={`text-[9px] font-black uppercase ${isOverTarget ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                  {isOverTarget ? 'On Track' : `Deficit: ${formatCurrency((parseFloat(String(data.goal)) || 0) - projectedGoal)}`}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
                         {/* Decoration */}
                         <ChevronRight className="absolute -right-2 top-1/2 -translate-y-1/2 w-6 h-6 text-zinc-100 dark:text-zinc-800 group-hover:text-emerald-500/20 transition-colors pointer-events-none" />
@@ -933,6 +1150,11 @@ export default function App() {
               isEditingAllocations={isEditingAllocations}
               setIsEditingAllocations={setIsEditingAllocations}
               handleUpdateAllocations={handleUpdateAllocations}
+              handleUpdateProfile={handleUpdateProfile}
+              isEditingGoals={isEditingGoals}
+              setIsEditingGoals={setIsEditingGoals}
+              editForm={editForm}
+              setEditForm={setEditForm}
             />
           )}
         </AnimatePresence>
@@ -956,133 +1178,6 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Settings Overlay */}
-      <AnimatePresence>
-        {isEditing && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-          >
-            <div className="absolute inset-0 bg-zinc-950/60 backdrop-blur-sm" onClick={() => setIsEditing(false)}></div>
-            <motion.div 
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="bg-white dark:bg-zinc-900 w-full max-w-2xl rounded-3xl shadow-2xl relative z-10 overflow-hidden border dark:border-zinc-800"
-            >
-              <div className="p-5 sm:p-8 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
-                <div>
-                  <h2 className="text-xl sm:text-2xl font-black tracking-tight text-zinc-900 dark:text-white">Project Configuration</h2>
-                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Configure your 2026 milestones</p>
-                </div>
-                <button 
-                  onClick={() => setIsEditing(false)}
-                  className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 group relative"
-                  title="Close Settings"
-                >
-                  <X className="w-5 h-5 transition-transform group-hover:rotate-90" />
-                </button>
-              </div>
-
-              <form onSubmit={handleUpdateProfile} className="p-5 sm:p-8 max-h-[75vh] overflow-y-auto">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
-                  <div className="col-span-full mb-4">
-                    <label className="block text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest mb-2">Universe Target Date</label>
-                    <div className="relative">
-                      <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-600" />
-                      <input 
-                        type="date" 
-                        value={editForm?.goalDate}
-                        onChange={(e) => setEditForm(prev => prev ? ({ ...prev, goalDate: e.target.value }) : null)}
-                        className="w-full pl-12 pr-4 py-4 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-bold text-zinc-900 dark:text-zinc-100 focus:ring-2 ring-emerald-500/20 outline-none transition-all cursor-pointer"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {(Object.keys(DEFAULT_PROFILE.categories) as CategoryKey[]).map((key) => {
-                    const categoryData = editForm?.categories[key] || DEFAULT_PROFILE.categories[key];
-                    return (
-                      <div key={key} className="space-y-4">
-                        <div className="flex items-center gap-2">
-                          <div className="text-emerald-600 dark:text-emerald-400">
-                            {getCategoryIcon(key)}
-                          </div>
-                          <h4 className="text-xs font-black text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">{CATEGORY_LABELS[key]}</h4>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-tighter mb-1.5 ml-1">Current State</label>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-sm leading-none">₹</span>
-                              <input 
-                                type="number" 
-                                value={categoryData.current}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setEditForm((prev: any) => {
-                                    if (!prev) return null;
-                                    const next = { 
-                                      ...prev, 
-                                      categories: { 
-                                        ...prev.categories, 
-                                        [key]: { ...(prev.categories[key] || DEFAULT_PROFILE.categories[key]), current: val } 
-                                      } 
-                                    };
-                                    return next;
-                                  });
-                                }}
-                                className="w-full pl-7 pr-3 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-mono font-bold text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:border-emerald-500 transition-colors"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-[9px] font-bold text-zinc-400 uppercase tracking-tighter mb-1.5 ml-1">Target Milestone</label>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-sm leading-none">₹</span>
-                              <input 
-                                type="number" 
-                                value={categoryData.goal}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setEditForm((prev: any) => {
-                                    if (!prev) return null;
-                                    const next = { 
-                                      ...prev, 
-                                      categories: { 
-                                        ...prev.categories, 
-                                        [key]: { ...(prev.categories[key] || DEFAULT_PROFILE.categories[key]), goal: val } 
-                                      } 
-                                    };
-                                    return next;
-                                  });
-                                }}
-                                className="w-full pl-7 pr-3 py-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl font-mono font-bold text-sm text-zinc-900 dark:text-zinc-100 outline-none focus:border-emerald-500 transition-colors"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="sticky bottom-0 bg-white dark:bg-zinc-900 pt-8 pb-2">
-                  <button 
-                    type="submit"
-                    className="w-full bg-zinc-950 dark:bg-emerald-600 text-white py-4 rounded-xl font-bold tracking-widest uppercase text-xs hover:bg-emerald-600 dark:hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg dark:shadow-none active:scale-[0.98]"
-                  >
-                    <Save className="w-4 h-4" />
-                    Commit to Database
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
     </div>
   );
