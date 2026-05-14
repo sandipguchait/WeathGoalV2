@@ -621,7 +621,40 @@ export default function App() {
     }
   };
 
-  if (loading) {
+  const handleToggleMonthlyMilestone = async (categoryKey: CategoryKey) => {
+    if (!user || !profile) return;
+
+    const dateKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+    const currentMilestones = { ...(profile.monthlyMilestones || {}) };
+    const monthMilestones = currentMilestones[dateKey] || [];
+
+    let updatedMonthMilestones: CategoryKey[];
+    if (monthMilestones.includes(categoryKey)) {
+      updatedMonthMilestones = monthMilestones.filter(k => k !== categoryKey);
+    } else {
+      updatedMonthMilestones = [...monthMilestones, categoryKey];
+    }
+
+    currentMilestones[dateKey] = updatedMonthMilestones;
+
+    try {
+      await setDoc(doc(db, 'profiles', user.uid), {
+        ...profile,
+        monthlyMilestones: currentMilestones,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `profiles/${user.uid}`);
+    }
+  };
+
+  const isCategoryCompletedThisMonth = (categoryKey: CategoryKey) => {
+    if (!profile?.monthlyMilestones) return false;
+    const dateKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+    return profile.monthlyMilestones[dateKey]?.includes(categoryKey) || false;
+  };
+
+  if (loading || (user && !profile)) {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
         <motion.div 
@@ -951,6 +984,56 @@ export default function App() {
                     </AnimatePresence>
                   </div>
                 </motion.div>
+
+                {/* Monthly Goals Checklist */}
+                <motion.div 
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ delay: 0.3 }}
+                   className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-sm"
+                >
+                  <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                    <span className="w-1 h-3 bg-emerald-500 rounded-full"></span>
+                    Monthly Milestone Registry
+                  </h2>
+                  
+                  <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-4 border-b border-zinc-100 dark:border-zinc-800 pb-2">
+                    {new Date(selectedYear, selectedMonth - 1).toLocaleString('default', { month: 'long' })} {selectedYear} Deployment
+                  </p>
+
+                  <div className="space-y-2">
+                    {profile && (Object.keys(profile.categories) as CategoryKey[]).filter(k => k !== 'salary').map((key) => {
+                      const completed = isCategoryCompletedThisMonth(key);
+                      return (
+                        <div 
+                          key={`checklist-${key}`}
+                          onClick={() => handleToggleMonthlyMilestone(key)}
+                          className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-all ${
+                            completed 
+                              ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400' 
+                              : 'bg-zinc-50 dark:bg-zinc-800/50 border-zinc-100 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-4 h-4 rounded flex items-center justify-center transition-all ${
+                              completed ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600'
+                            }`}>
+                              {completed && <Check className="w-3 h-3" />}
+                            </div>
+                            <span className="text-xs font-black uppercase tracking-tight">{CATEGORY_LABELS[key]}</span>
+                          </div>
+                          {completed && <span className="text-[8px] font-bold uppercase py-0.5 px-1.5 bg-emerald-100 dark:bg-emerald-800/50 rounded">Manifested</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  <div className="mt-6 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                    <p className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 leading-relaxed uppercase tracking-tighter">
+                      Mark your monthly goals as they are achieved. The respective asset cards will maintain a visual confirmation state.
+                    </p>
+                  </div>
+                </motion.div>
               </section>
 
               {/* Right Section: Main Metrics & Details */}
@@ -1057,18 +1140,28 @@ export default function App() {
                           setAllocationForm(data.allocations || []);
                           window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
-                        className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500/30 dark:hover:border-emerald-500/50 transition-all group shadow-sm hover:shadow-md cursor-pointer relative overflow-hidden flex flex-col justify-between"
+                        className={`p-5 rounded-2xl border transition-all group shadow-sm hover:shadow-md cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                          isCategoryCompletedThisMonth(key)
+                            ? 'bg-emerald-600 border-emerald-500 text-white dark:text-white'
+                            : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-emerald-500/30 dark:hover:border-emerald-500/50'
+                        }`}
                       >
                          {/* Category Icon */}
                         <div className="flex justify-between items-start mb-4">
                           <div>
-                            <h4 className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-tight">{CATEGORY_LABELS[key]}</h4>
-                            <p className="text-xl font-bold font-mono mt-1 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors dark:text-zinc-100">
+                            <h4 className={`text-xs font-bold uppercase tracking-tight ${isCategoryCompletedThisMonth(key) ? 'text-emerald-100' : 'text-zinc-500 dark:text-zinc-400'}`}>{CATEGORY_LABELS[key]}</h4>
+                            <p className={`text-xl font-bold font-mono mt-1 transition-colors ${
+                              isCategoryCompletedThisMonth(key) ? 'text-white' : 'group-hover:text-emerald-700 dark:group-hover:text-emerald-400 dark:text-zinc-100'
+                            }`}>
                               {formatCurrency(savings.monthly)}
                             </p>
-                            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">Monthly Target</p>
+                            <p className={`text-[10px] font-medium ${isCategoryCompletedThisMonth(key) ? 'text-emerald-100/70' : 'text-zinc-400 dark:text-zinc-500'}`}>Monthly Target</p>
                           </div>
-                          <div className="w-8 h-8 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/50 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
+                            isCategoryCompletedThisMonth(key) 
+                              ? 'bg-emerald-500/50 text-white' 
+                              : 'bg-zinc-50 dark:bg-zinc-800 text-zinc-400 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/50 group-hover:text-emerald-600 dark:group-hover:text-emerald-400'
+                          }`}>
                             {getCategoryIcon(key)}
                           </div>
                         </div>
@@ -1081,11 +1174,11 @@ export default function App() {
                             setShowTooltipKey(showTooltipKey === key ? null : key);
                           }}
                         >
-                          <div className="w-full h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                          <div className={`w-full h-2 rounded-full overflow-hidden ${isCategoryCompletedThisMonth(key) ? 'bg-black/10' : 'bg-zinc-100 dark:bg-zinc-800'}`}>
                             <motion.div 
                               initial={{ width: 0 }}
                               animate={{ width: `${progress}%` }}
-                              className="h-full bg-emerald-500"
+                              className={`h-full ${isCategoryCompletedThisMonth(key) ? 'bg-white shadow-[0_0_8px_rgba(255,255,255,0.5)]' : 'bg-emerald-500'}`}
                             />
                           </div>
                           
@@ -1102,30 +1195,34 @@ export default function App() {
                           </div>
                         </div>
 
-                        <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400 mb-4">
+                        <div className={`flex justify-between items-center text-[10px] font-bold mb-4 ${isCategoryCompletedThisMonth(key) ? 'text-emerald-50/80' : 'text-zinc-400'}`}>
                           <span>{Math.round(progress)}% Complete</span>
-                          <span className="text-zinc-600 dark:text-zinc-500">Goal: {formatCurrency(data.goal)}</span>
+                          <span className={isCategoryCompletedThisMonth(key) ? 'text-emerald-50/60' : 'text-zinc-600 dark:text-zinc-500'}>Goal: {formatCurrency(data.goal)}</span>
                         </div>
 
                         {/* Projection Summary Section (Excluding Salary) */}
                         {key !== 'salary' && (
-                          <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800/50 mt-auto">
+                          <div className={`pt-4 border-t mt-auto ${isCategoryCompletedThisMonth(key) ? 'border-white/10' : 'border-zinc-100 dark:border-zinc-800/50'}`}>
                             <div className="flex justify-between items-center mb-1">
-                              <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Projected End</span>
-                              <span className={`text-[11px] font-black font-mono ${isOverTarget ? 'text-emerald-500' : 'text-indigo-500 dark:text-indigo-400'}`}>
+                              <span className={`text-[9px] font-black uppercase tracking-widest ${isCategoryCompletedThisMonth(key) ? 'text-emerald-100/50' : 'text-zinc-400'}`}>Projected End</span>
+                              <span className={`text-[11px] font-black font-mono ${
+                                isCategoryCompletedThisMonth(key) ? 'text-white' : isOverTarget ? 'text-emerald-500' : 'text-indigo-500 dark:text-indigo-400'
+                              }`}>
                                 {formatCurrency(projectedGoal)}
                               </span>
                             </div>
                             <div className="flex justify-between items-center">
-                              <span className="text-[8px] font-bold text-zinc-400 uppercase">Status</span>
+                              <span className={`text-[8px] font-bold uppercase ${isCategoryCompletedThisMonth(key) ? 'text-emerald-100/50' : 'text-zinc-400'}`}>Status</span>
                               <div className="flex items-center gap-1">
-                                {isOverTarget ? (
-                                  <Check className="w-2.5 h-2.5 text-emerald-500" />
+                                {isCategoryCompletedThisMonth(key) || isOverTarget ? (
+                                  <Check className={`w-2.5 h-2.5 ${isCategoryCompletedThisMonth(key) ? 'text-white' : 'text-emerald-500'}`} />
                                 ) : (
                                   <AlertCircle className="w-2.5 h-2.5 text-amber-500" />
                                 )}
-                                <span className={`text-[9px] font-black uppercase ${isOverTarget ? 'text-emerald-500' : 'text-amber-500'}`}>
-                                  {isOverTarget ? 'On Track' : `Deficit: ${formatCurrency((parseFloat(String(data.goal)) || 0) - projectedGoal)}`}
+                                <span className={`text-[9px] font-black uppercase ${
+                                  isCategoryCompletedThisMonth(key) ? 'text-white' : isOverTarget ? 'text-emerald-500' : 'text-amber-500'
+                                }`}>
+                                  {isCategoryCompletedThisMonth(key) ? 'Goal Achieved' : isOverTarget ? 'On Track' : `Deficit: ${formatCurrency((parseFloat(String(data.goal)) || 0) - projectedGoal)}`}
                                 </span>
                               </div>
                             </div>
@@ -1133,7 +1230,14 @@ export default function App() {
                         )}
 
                         {/* Decoration */}
-                        <ChevronRight className="absolute -right-2 top-1/2 -translate-y-1/2 w-6 h-6 text-zinc-100 dark:text-zinc-800 group-hover:text-emerald-500/20 transition-colors pointer-events-none" />
+                        <ChevronRight className={`absolute -right-2 top-1/2 -translate-y-1/2 w-6 h-6 transition-colors pointer-events-none ${
+                          isCategoryCompletedThisMonth(key) ? 'text-white/10' : 'text-zinc-100 dark:text-zinc-800 group-hover:text-emerald-500/20'
+                        }`} />
+                        
+                        {/* Background Glow for completed state */}
+                        {isCategoryCompletedThisMonth(key) && (
+                          <div className="absolute -right-10 -bottom-10 w-32 h-32 bg-white/10 rounded-full blur-3xl"></div>
+                        )}
                       </motion.div>
                     );
                   })}

@@ -24,6 +24,7 @@ export interface FinancialProfile {
     gold_silver: CategoryData;
     international_stocks: CategoryData;
   };
+  monthlyMilestones?: Record<string, CategoryKey[]>;
 }
 
 export type CategoryKey = keyof FinancialProfile['categories'];
