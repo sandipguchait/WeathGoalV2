@@ -46,6 +46,7 @@ import {
   handleFirestoreError, 
   OperationType 
 } from './lib/firebase';
+import LandingPage from './components/LandingPage';
 import { 
   FinancialProfile, 
   CATEGORY_LABELS, 
@@ -62,14 +63,14 @@ import {
 const DEFAULT_PROFILE: Omit<FinancialProfile, 'userId' | 'updatedAt'> = {
   goalDate: '2026-12-31',
   categories: {
-    salary: { goal: 140000, current: 110000 },
-    etf: { goal: 800000, current: 454000 },
-    stocks: { goal: 800000, current: 328000 },
-    mutual_funds: { goal: 400000, current: 190000 },
-    emergency_funds: { goal: 450000, current: 310000 },
-    travel_fund: { goal: 150000, current: 12000 },
-    gold_silver: { goal: 200000, current: 50000 },
-    international_stocks: { goal: 500000, current: 0 }
+    salary: { goal: 0, current: 0 },
+    etf: { goal: 0, current: 0 },
+    stocks: { goal: 0, current: 0 },
+    mutual_funds: { goal: 0, current: 0 },
+    emergency_funds: { goal: 0, current: 0 },
+    travel_fund: { goal: 0, current: 0 },
+    gold_silver: { goal: 0, current: 0 },
+    international_stocks: { goal: 0, current: 0 }
   }
 };
 
@@ -667,35 +668,7 @@ export default function App() {
   }
 
   if (!user) {
-    return (
-      <div className={`${isDarkMode ? 'dark' : ''} min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col items-center justify-center p-4 transition-colors duration-300`}>
-        <div className="absolute top-8 right-8">
-          <button 
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className="w-10 h-10 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-emerald-500 transition-all shadow-sm"
-          >
-            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
-        </div>
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-3xl p-10 border border-zinc-200 dark:border-zinc-800 shadow-xl text-center"
-        >
-          <div className="w-20 h-20 bg-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-lg shadow-emerald-200 dark:shadow-none">
-            <TrendingUp className="w-10 h-10 text-white" />
-          </div>
-          <h1 className="text-4xl font-black tracking-tight text-zinc-900 dark:text-white mb-2">WealthWise<span className="text-emerald-600">.v2</span></h1>
-          <p className="text-zinc-500 dark:text-zinc-400 mb-10 font-medium">Professional financial velocity tracker for your 2026 milestones.</p>
-          <button 
-            onClick={signIn}
-            className="w-full bg-zinc-950 dark:bg-emerald-600 text-white py-4 rounded-xl font-bold tracking-widest uppercase text-xs hover:bg-zinc-800 dark:hover:bg-emerald-700 transition-all active:scale-95 flex items-center justify-center gap-3 shadow-md"
-          >
-            Authenticate with Google
-          </button>
-        </motion.div>
-      </div>
-    );
+    return <LandingPage onSignIn={signIn} />;
   }
 
   const remaining = profile ? calculateRemainingTime(profile.goalDate) : { months: 0, weeks: 0, days: 0 };
